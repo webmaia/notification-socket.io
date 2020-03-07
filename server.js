@@ -4,7 +4,7 @@ var http = require('http').Server(app);
 var io = require('socket.io')(http);
 var bodyParser = require('body-parser');
 
-process.env['AUTH_TOKEN'] = 'asdfg541';
+process.env['AUTH_TOKEN'] = 'blablabla';
 
 app.set('port', (process.env.PORT || 3000));
 app.use(bodyParser.urlencoded({extended: true}));
