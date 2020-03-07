@@ -1,10 +1,12 @@
-var app = require('express')();
+var express = require('express');
+var app = express();
 var http = require('http').Server(app);
 var io = require('socket.io')(http);
 var bodyParser = require('body-parser');
 
-app.set('port', (process.env.PORT || 3000));
+process.env['AUTH_TOKEN'] = 'asdfg541';
 
+app.set('port', (process.env.PORT || 3000));
 app.use(bodyParser.urlencoded({extended: true}));
 app.use(bodyParser.json());
 
@@ -13,8 +15,10 @@ app.use(bodyParser.json());
  */
 var pjson = require('./package.json');
 
+var connections = {};
+
 var pushService = (function() {
-	var connections = {};
+
 	return {
 		/**
 		 * Register user in connections. This method must be executed as first in whole registration process.
@@ -38,16 +42,22 @@ var pushService = (function() {
 		 * @returns {boolean} if socket was registered or not, if false then you have to do everything again.
 		 */
 		registerSocket: function(userId, connectionId, socket) {
-			if (connections[userId] != null && connections[userId][connectionId] == null) {
-				socket.userId = userId;
-				socket.connectionId = connectionId;
-				connections[userId][connectionId] = socket;
-				console.log('Registered socket for connection ' + connectionId.substring(0, 4) + '*** and  user ' + userId);
-				return true;
-			} else {
-				console.log('Not found empty conn for connection ' + connectionId.substring(0, 4) + '*** and  user ' + userId);
-				return false;
+			console.log('conexões');
+			console.log(connections);
+			console.log(connections[userId]);
+			console.log('if');
+			console.log(connections[userId] === undefined);
+
+			if (connections[userId] === undefined) {
+				connections[userId] = {};
 			}
+
+			connections[userId][connectionId] = socket;
+
+			console.log('conexões');
+			console.log(connections.length);
+			//console.log(connections);
+
 		},
 		/**
 		 * Remove connection.
@@ -86,12 +96,14 @@ var pushService = (function() {
  * Handle connection to socket.io.
  */
 io.on('connection', function(socket) {
-	/**
+
+    /**
 	 * On registered socket from client.
 	 */
 	socket.on('register', function(userId, connectionId) {
 		pushService.registerSocket(userId, connectionId, socket);
 	});
+
 
 	/**
 	 * On disconnected socket.
@@ -99,6 +111,39 @@ io.on('connection', function(socket) {
 	socket.on('disconnect', function() {
 		pushService.removeConnection(socket);
 	});
+
+
+    /**
+     * On message socket.
+     */
+    socket.on('message', function(message) {
+        //console.log('data ');
+        //console.log(JSON.parse(message));
+        //console.log('conexões');
+
+		var data = JSON.parse(message);
+
+		var id = data.to.id;
+		var context = data.to.context;
+
+		//console.log(connections);
+
+		var userConnections = connections[id];
+		if (userConnections) {
+			if(userConnections.hasOwnProperty(context)){
+				//console.log('existe conexão do context');
+				//console.log(context);
+				var socket = userConnections[context];
+				if (socket != null) {
+					socket.emit('message', message);
+				}
+			}
+		}
+
+
+    });
+
+
 });
 
 /**
@@ -112,11 +157,18 @@ app.put('/api/:userId/register', function(req, res) {
 		var connectionId = req.query['connectionId'];
 		if (userId && connectionId) {
 			pushService.registerUser(userId, connectionId);
-			res.send();
+			res.send('Success');
 		} else {
 			res.status(400).send('Bad Request');
 		}
 	}
+});
+
+
+app.put('/api/connections', function(req, res) {
+	res.setHeader('Content-Type', 'application/json');
+
+	res.send(JSON.stringify(Object.keys(connections)));
 });
 
 /**
@@ -128,8 +180,8 @@ app.post('/api/:userId/push', function(req, res) {
 	} else {
 		var userId = req.params['userId'];
 		if (userId && req.body.message) {
-			pushService.pushMessage(userId, req.body.message);
-			res.send();
+			pushService.pushMessage(userId, req.body);
+			res.send('Success');
 		}
 		else {
 			res.status(400).send('Bad Request');
@@ -154,6 +206,16 @@ app.get('/api/status/info', function(req, res) {
 		'version': pjson.version
 	};
 	res.send(info)
+});
+
+/**
+ * log endpoint.
+ */
+app.get('/api/log', function(req, res) {
+    //res.send('pong');
+    //res.render('log');
+    res.sendFile(__dirname + '/log.html');
+
 });
 
 http.listen(app.get('port'), function() {
